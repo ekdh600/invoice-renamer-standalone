@@ -1,133 +1,37 @@
-# Invoice Renamer (견적서 파일명 자동 변경)
+# Invoice Renamer Standalone
 
-PDF 견적서에서 **상호명(발행 업체)** 과 **날짜(YYYYMMDD)** 를 추출해 파일명을 자동으로 바꿉니다.
+PII(개인정보) 보호 기반 지능형 PDF 파일명 자동화 시스템의 핵심 설계 및 LLM 프롬프트가 포함된 프로젝트입니다.
+이 프로젝트는 **LangChain**과 **Local OCR/LLM**, **Microsoft Presidio**를 사용하여 스캔된 견적서의 파일명을 안전하게 `업체명_날짜.pdf` 형식으로 자동 변경합니다.
 
-- 기본: **로컬 우선** (LM Studio 비전 모델로 OCR → 텍스트에서 상호/날짜 추출)
-- 옵션: CLOVA OCR 사용 가능 (`--clova`)
+## 핵심 LLM 프롬프트 설계
 
-## 단독 실행(standalone) 안내
+이 시스템은 외부/로컬 LLM을 사용하여 마스킹된 텍스트나 OCR 결과에서 핵심 정보를 뽑아냅니다.
+프롬프트는 다음과 같이 최적화되어 있습니다.
 
-이 프로젝트는 `99-Projects/invoice-renamer/` 폴더만 따로 복사해도 실행 가능합니다.
+```text
+System/User Prompt:
 
-- 입력 PDF/출력 폴더는 사용자가 지정합니다 (`--file/--dir`, `--out`)
-- `.env`에는 **개인 키를 넣지 말고** 각자 환경에 맞게 설정하세요 (`.env.example` 제공)
+아래 견적서 텍스트에서 발행업체 상호명과 날짜를 추출해.
+- 반드시 JSON만 출력: {"company_name":"...","date":"YYYYMMDD 또는 Unknown"}
+- 상호는 '상호/업체명' 라벨의 회사명 우선
+- '성명/이름/담당/귀하/부서'가 붙어 있으면 제거
+- 날짜는 YYYYMMDD 형식, 없으면 Unknown
 
-## 요구사항
-
-- Python **3.11+**
-- (로컬 OCR 사용 시) **poppler**
-- (로컬 OCR 사용 시) LM Studio에서 **비전(Vision) 모델** 실행
-
-## 설치 (공통)
-
-```bash
-cd 99-Projects/invoice-renamer
-pip install -r requirements.txt
-pip install -e .
+[견적서 텍스트]
+{text}
+[텍스트 끝]
 ```
 
-로컬 OCR을 쓰려면 `pdf2image` + poppler가 필요합니다.
+## 주요 시스템 워크플로우
 
-### macOS (Homebrew)
+1. **Pre-processing (PDF -> 이미지)**: `pdf2image`를 통해 PDF를 해상도 최적화(DPI 변환).
+2. **Local OCR (Vision LLM / PaddleOCR / CLOVA OCR)**: 로컬 혹은 외부 OCR을 거쳐 전체 텍스트를 추출.
+3. **PII Masking (Microsoft Presidio)**: 사업자번호, 계좌번호, 주민등록번호, 연락처 등 민감 개인정보를 로컬 환경에서 먼저 마스킹.
+4. **LLM Extraction**: 마스킹 된 안전한 정보를 프롬프트와 함께 LLM에 주입하여 `company_name`과 `date`를 JSON 구조화 포맷으로 돌려받음.
+5. **Rename & Organize**: 추출 결과에 따라 파일명을 규칙 기반(Regex 정제)으로 치환 및 디렉터리 분배/저장.
 
-```bash
-brew install poppler
-```
+## 주요 고려사항 (데이터 구조)
 
-### Windows
-
-#### 1) poppler 설치
-
-`pdf2image`는 내부적으로 `pdftoppm`(poppler)을 호출합니다. Windows에서는 poppler를 설치하고 PATH에 추가해야 합니다.
-
-- **권장(Chocolatey)**:
-
-```powershell
-choco install poppler -y
-```
-
-설치 후 새 PowerShell을 열고 확인:
-
-```powershell
-pdftoppm -h
-```
-
-만약 `pdftoppm`를 못 찾는다면, poppler의 `bin` 폴더가 PATH에 포함되었는지 확인하세요.
-
-#### 2) LM Studio 실행 (로컬 OCR/추출용)
-
-- LM Studio에서 비전 모델(예: `qwen/qwen2.5-vl-7b` 등)을 **로드**
-- Local Server를 켜고 기본 주소가 `http://127.0.0.1:1234`인지 확인
-
-## 환경변수
-
-`.env.example`를 `.env`로 복사해서 값만 채워주세요.
-
-### macOS/Linux
-
-```bash
-cp .env.example .env
-```
-
-### Windows (PowerShell)
-
-```powershell
-Copy-Item .env.example .env
-```
-
-`.env` 내용 예시:
-
-- `LM_STUDIO_BASE_URL`: 보통 `http://127.0.0.1:1234`
-- `LM_VISION_MODEL`: LM Studio에서 실행 중인 비전 모델 키
-
-## 사용법
-
-### 단일 파일
-
-```bash
-python -m invoice_renamer --file "/path/to/invoice.pdf" --out "./out"
-```
-
-### 디렉터리
-
-```bash
-python -m invoice_renamer --dir "./invoices" --out "./out"
-```
-
-### Windows 예시 (PowerShell)
-
-```powershell
-python -m invoice_renamer --file "C:\\invoices\\2.pdf" --out ".\\out"
-python -m invoice_renamer --dir  "C:\\invoices"      --out ".\\out"
-```
-
-### CLOVA OCR 사용
-
-```bash
-python -m invoice_renamer --file "./invoices/2.pdf" --out "./out" --clova
-```
-
-## 출력 파일명 규칙
-
-`{상호명}_{YYYYMMDD}.pdf`
-
-날짜를 못 찾으면 `00000000`으로 저장합니다.
-
-## 트러블슈팅
-
-### `pdf2image` 관련 오류 / `pdftoppm` not found
-
-- Windows: poppler 설치 및 PATH 반영 후 새 터미널에서 재시도
-- macOS: `brew install poppler`
-
-### LM Studio OCR이 실패하거나 너무 느림
-
-- PDF가 크면 이미지가 커져서 실패할 수 있어, 내부적으로 **리사이즈(긴 변 1536px)** 후 전송합니다.
-- 그래도 실패하면:
-  - `--max-pages 1`로 줄여서 테스트
-  - `--ocr-dpi`를 200→150으로 낮춰보기
-  - LM Studio에서 **다른 비전 모델**로 교체
-
-## 프롬프트
-
-현재 코드에서 사용 중인 프롬프트 원문은 `invoice-renamer-prompts.md`에 정리되어 있습니다.
+Pydantic을 통한 강제 파싱 모델:
+- `company_name`: 견적서를 발행한 업체명 또는 상호명
+- `date`: YYYYMMDD 형식의 날짜. 판독 불가시 `Unknown` 강제.

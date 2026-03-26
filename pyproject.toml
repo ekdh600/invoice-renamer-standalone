@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "invoice-renamer"
+version = "0.1.0"
+description = "Extract company/date from PDF invoice and rename file."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "python-dotenv>=1.0.0",
+  "requests>=2.28.0",
+  "pypdf>=4.0.0",
+  "langchain-community>=0.3.0",
+  "pdf2image>=1.17.0",
+  "pillow>=10.0.0",
+]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]

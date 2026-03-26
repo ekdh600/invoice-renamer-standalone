@@ -1,0 +1,10 @@
+.DS_Store
+__pycache__/
+*.py[cod]
+.venv/
+.env
+
+# 입력/출력 (문서 내용 포함 가능)
+out/
+invoices/
+data/
